@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 API_TOKEN = os.getenv("MY_SECRET_TOKEN")
 
-API_ENDPOINT = "https://api.huggingface.co/assistants/6853beafc63a7d91a6587077/completions"
+API_ENDPOINT = "https://huggingface.co/chat/assistant/68530f04c809e4b59b94a08c/completions"
+
 
 
 # Streamlit UI
@@ -16,11 +17,7 @@ st.title("🌾 FarminAi - Your Farming Assistant")
 
 st.write("""
 Ask anything related to agriculture:
-- 🌾 Crop rotation  
-- 🌱 Soil health  
-- 💧 Irrigation  
-- 🐄 Livestock care  
-- 🛒 Market tips  
+
 """)
 
 user_input = st.text_input("👨‍🌾 Ask your question:")
