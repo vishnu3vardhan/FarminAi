@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 API_TOKEN = os.getenv("MY_SECRET_TOKEN")
 
-API_ENDPOINT = "https://huggingface.co/chat/assistant/68530f04c809e4b59b94a08c/completions"
+API_ENDPOINT = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
 
 
 
