@@ -21,6 +21,8 @@ AVAILABLE_MODELS = {
 def init_session():
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "model_path" not in st.session_state:
+        st.session_state.model_path = AVAILABLE_MODELS["DialoGPT Medium"]
 
 # Custom styling
 st.set_page_config(page_title="FarminAi - Farming Assistant", layout="wide")
@@ -54,7 +56,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Format messages
-
 def format_message(role: str, content: str):
     if role == "user":
         st.markdown(f"""
@@ -78,8 +79,11 @@ def test_model_availability(model: str) -> bool:
     try:
         payload = {"inputs": "ping"}
         response = requests.post(endpoint, headers=headers, json=payload, timeout=10)
-        return response.status_code in [200, 503]
-    except:
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except requests.exceptions.RequestException as e:
         return False
 
 # Query the Hugging Face API
@@ -115,6 +119,8 @@ def query_model(prompt: str, model: str, temperature=0.7, top_p=0.9, max_length=
         response.raise_for_status()
         result = response.json()
         return result[0].get("generated_text", "Sorry, I couldn’t understand your question.").strip()
+    except requests.exceptions.RequestException as e:
+        return f"❌ Network Error: {e}"
     except Exception as e:
         return f"❌ Error: {e}"
 
@@ -128,11 +134,11 @@ with st.sidebar:
     st.header("🌾 FarminAi Settings")
 
     selected_model = st.selectbox("Select AI Model:", list(AVAILABLE_MODELS.keys()))
-    model_path = AVAILABLE_MODELS[selected_model]
+    st.session_state.model_path = AVAILABLE_MODELS[selected_model]
 
     if st.button("Test Model Availability"):
         with st.spinner("Checking availability..."):
-            if test_model_availability(model_path):
+            if test_model_availability(st.session_state.model_path):
                 st.success("✅ Model is available!")
             else:
                 st.error("❌ Model not responding or unavailable.")
@@ -143,8 +149,7 @@ with st.sidebar:
     top_p = st.slider("Top-p (nucleus sampling)", 0.1, 1.0, 0.9)
 
     if st.button("🗑️ Clear Chat"):
-        st.session_state.messages = []
-        st.rerun()
+        st.session_state.messages.clear()
 
 # Display previous chat
 for msg in st.session_state.messages:
@@ -158,9 +163,8 @@ if user_input:
     format_message("user", user_input)
 
     with st.spinner("🤖 FarminAi is thinking..."):
-        response = query_model(user_input, model_path, temperature, top_p, max_length)
+        response = query_model(user_input, st.session_state.model_path, temperature, top_p, max_length)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     format_message("assistant", response)
-    st.rerun()
-
+    st.experimental_rerun()  # Improved session state update
