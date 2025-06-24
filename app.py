@@ -167,4 +167,4 @@ if user_input:
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     format_message("assistant", response)
-    st.experimental_rerun()  # Improved session state update
+    st.rerun()  # Improved session state update
