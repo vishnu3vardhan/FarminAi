@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 API_TOKEN = os.getenv("MY_SECRET_TOKEN")
 
-# Fixed model: Zephyr
+# Model name
 MODEL_NAME = "HuggingFaceH4/zephyr-7b-beta"
 
 # Initialize session state
@@ -15,69 +15,99 @@ def init_session():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-# Page config
+# Page configuration
 st.set_page_config(
     page_title="FarminAi - Farming Assistant",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# Mobile-friendly CSS
+# Custom CSS for styling
 st.markdown("""
 <style>
-.chat-message {
+/* Base font and background */
+html, body, [class*="css"] {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #f5f9f6;
+    color: #2e3c3a;
+}
+
+/* Chat bubble container */
+.chat-bubble {
     padding: 1rem;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     margin-bottom: 1rem;
-    display: flex;
-    flex-direction: column;
-    font-size: 1.05rem;
-    word-wrap: break-word;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.user-message {
-    background-color: #e8f5e9;
-    border-left: 4px solid #43a047;
+
+/* User message styling */
+.user-bubble {
+    background: #d1ecf1;
+    border-left: 6px solid #17a2b8;
+    color: #0c5460;
 }
-.assistant-message {
-    background-color: #f1f8e9;
-    border-left: 4px solid #558b2f;
-}
-.message-header {
-    font-weight: 600;
-    color: #33691e;
-    margin-bottom: 0.3rem;
-}
-.message-content {
+
+/* Assistant message styling */
+.assistant-bubble {
+    background: #e8f5e9;
+    border-left: 6px solid #4caf50;
     color: #2e7d32;
-    line-height: 1.6;
 }
-@media (max-width: 768px) {
-    .chat-message {
-        font-size: 1rem;
-        padding: 0.75rem;
-    }
+
+/* On hover, slightly raise bubbles */
+.chat-bubble:hover {
+    transform: scale(1.02);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* Message header */
+.header {
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+    font-size: 1.1rem;
+}
+
+/* Message body */
+.body-text {
+    line-height: 1.65;
+    font-size: 1.02rem;
+}
+
+/* Button wrapper (like for new chat) */
+.new-chat-button {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
+}
+
+/* Button styling for better visibility */
+button[kind="primary"] {
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    transition: background-color 0.3s ease;
+}
+
+button[kind="primary"]:hover {
+    background-color: #388e3c;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Format messages
+# Format chat messages
 def format_message(role: str, content: str):
-    if role == "user":
-        st.markdown(f"""
-        <div class="chat-message user-message">
-            <div class="message-header">👨‍🌾 Farmer</div>
-            <div class="message-content">{content}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class="chat-message assistant-message">
-            <div class="message-header">🤖 FarminAi</div>
-            <div class="message-content">{content}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    bubble_class = "user-bubble" if role == "user" else "assistant-bubble"
+    name = "You" if role == "user" else "FarminAi"
+    st.markdown(f"""
+    <div class="chat-bubble {bubble_class}">
+        <div class="header">{name}</div>
+        <div class="body-text">{content}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Query the Hugging Face API
+# Query Hugging Face model
 def query_model(prompt: str, model: str) -> str:
     endpoint = f"https://api-inference.huggingface.co/models/{model}"
     headers = {
@@ -109,60 +139,95 @@ def query_model(prompt: str, model: str) -> str:
         response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         result = response.json()
-        return result[0].get("generated_text", "Sorry, I couldn’t understand your question.").strip()
+        return result[0].get("generated_text", "Sorry, I couldn't understand your question.").strip()
     except requests.exceptions.RequestException as e:
         return f"❌ Network Error: {e}"
     except Exception as e:
         return f"❌ Error: {e}"
 
-# MAIN APP
+# Initialize session
 init_session()
-st.title("🌱 FarminAi")
-st.markdown("Your friendly farming assistant for Indian agriculture.")
 
+# --- Header ---
+st.title("🌾 FarminAi - Your Smart Farming Assistant")
+st.markdown("Ask me anything about farming — crops, weather, soil, pests, and more!")
 
+# --- New Chat Button ---
+with st.container():
+    col1, col2 = st.columns([8, 2])
+    with col2:
+        if st.button("🔁 New Chat"):
+            st.session_state.messages = []
+            st.rerun()
 
-# Display previous chat
+# --- Chat history ---
 for msg in st.session_state.messages:
     format_message(msg["role"], msg["content"])
 
-# Chat input
-user_input = st.chat_input("👨‍🌾 Ask about crops, pests, weather, or soil...")
+# --- Chat input ---
+user_input = st.chat_input("👨‍🌾 Ask me anything about farming.")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     format_message("user", user_input)
 
-    with st.spinner("🤖 FarminAi is thinking..."):
+    with st.spinner("FarminAi is thinking..."):
         response = query_model(user_input, MODEL_NAME)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     format_message("assistant", response)
     st.rerun()
 
-# --- Mobile Fixes ---
-
-# Add bottom padding on mobile to prevent keyboard overlap
+# --- Mobile UI Optimization ---
 st.markdown("""
 <style>
+/* General mobile optimization */
 @media (max-width: 768px) {
+    /* Increase bottom padding for small screens */
     .block-container {
-        padding-bottom: 120px;  /* Extra space for keyboard */
+        padding-bottom: 120px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
     }
+
+    /* Adjust font size for mobile screens */
+    .css-18e3th9 {
+        font-size: 16px !important;
+    }
+    
+    /* Enhance button appearance on mobile */
+    button {
+        font-size: 16px;
+        padding: 10px 20px;
+    }
+
+    /* Make text input more user-friendly on mobile */
+    input[type="text"] {
+        font-size: 18px;
+        padding: 12px;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+/* Ensure smooth scrolling effect */
+html {
+    scroll-behavior: smooth;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Scroll chat input into view when focused
+# --- Auto Scroll on Input ---
 st.markdown("""
 <script>
 const chatInput = window.parent.document.querySelector('input[type="text"]');
 if (chatInput) {
   chatInput.addEventListener('focus', () => {
     setTimeout(() => {
-      window.scrollTo(0, document.body.scrollHeight);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }, 300);
   });
 }
 </script>
 """, unsafe_allow_html=True)
+
