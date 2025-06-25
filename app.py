@@ -1,71 +1,61 @@
 import streamlit as st
 import requests
 import os
-import json
-import time
 from dotenv import load_dotenv
 
 # Load .env for secret token
 load_dotenv()
 API_TOKEN = os.getenv("MY_SECRET_TOKEN")
 
-# Available Models (focused for conversational AI in agriculture)
-AVAILABLE_MODELS = {
-    "DialoGPT Medium": "microsoft/DialoGPT-medium",
-    "DialoGPT Large": "microsoft/DialoGPT-large",
-    "Mistral Instruct": "mistralai/Mistral-7B-Instruct-v0.1"
-}
+# Fixed model: Zephyr
+MODEL_NAME = "HuggingFaceH4/zephyr-7b-beta"
 
 # Initialize session state
 def init_session():
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    if "model_path" not in st.session_state:
-        st.session_state.model_path = AVAILABLE_MODELS["DialoGPT Medium"]
 
-# Custom styling
-st.set_page_config(page_title="FarminAi - Farming Assistant", layout="wide")
+# Page config
+st.set_page_config(
+    page_title="FarminAi - Farming Assistant",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# Mobile-friendly CSS
 st.markdown("""
 <style>
-body {
-    background-color: #f6f8f9;
-}
 .chat-message {
     padding: 1rem;
-    border-radius: 12px;
-    margin: 0.5rem 0;
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    font-size: 1.05rem;
+    word-wrap: break-word;
 }
 .user-message {
-    background-color: #e3f2fd;
-    border-left: 5px solid #2196f3;
+    background-color: #e8f5e9;
+    border-left: 4px solid #43a047;
 }
 .assistant-message {
     background-color: #f1f8e9;
-    border-left: 5px solid #7cb342;
+    border-left: 4px solid #558b2f;
 }
 .message-header {
     font-weight: 600;
-    color: #37474f;
-    margin-bottom: 0.4rem;
+    color: #33691e;
+    margin-bottom: 0.3rem;
 }
 .message-content {
-    color: #455a64;
+    color: #2e7d32;
     line-height: 1.6;
 }
-.sidebar-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #2e7d32;
-    margin-top: 1rem;
-}
-hr {
-    border: none;
-    height: 1px;
-    background-color: #ccc;
-    margin: 1rem 0;
+@media (max-width: 768px) {
+    .chat-message {
+        font-size: 1rem;
+        padding: 0.75rem;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -87,19 +77,8 @@ def format_message(role: str, content: str):
         </div>
         """, unsafe_allow_html=True)
 
-# Test model availability
-def test_model_availability(model: str) -> bool:
-    endpoint = f"https://api-inference.huggingface.co/models/{model}"
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    try:
-        payload = {"inputs": "ping"}
-        response = requests.post(endpoint, headers=headers, json=payload, timeout=10)
-        return response.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
-
 # Query the Hugging Face API
-def query_model(prompt: str, model: str, temperature=0.7, top_p=0.9, max_length=200) -> str:
+def query_model(prompt: str, model: str) -> str:
     endpoint = f"https://api-inference.huggingface.co/models/{model}"
     headers = {
         "Authorization": f"Bearer {API_TOKEN}",
@@ -117,9 +96,9 @@ def query_model(prompt: str, model: str, temperature=0.7, top_p=0.9, max_length=
     payload = {
         "inputs": message,
         "parameters": {
-            "max_new_tokens": max_length,
-            "temperature": temperature,
-            "top_p": top_p,
+            "max_new_tokens": 200,
+            "temperature": 0.7,
+            "top_p": 0.9,
             "do_sample": True,
             "return_full_text": False,
             "stop": ["Farmer:", "FarminAi:"]
@@ -138,30 +117,10 @@ def query_model(prompt: str, model: str, temperature=0.7, top_p=0.9, max_length=
 
 # MAIN APP
 init_session()
-st.title("🌱 FarminAi - Your Farming Assistant")
-st.caption("Helping Indian farmers with intelligent, accurate, and localized agriculture advice.")
+st.title("🌱 FarminAi")
+st.markdown("Your friendly farming assistant for Indian agriculture.")
 
-# Sidebar settings
-with st.sidebar:
-    st.markdown('<div class="sidebar-title">🌾 FarminAi Settings</div>', unsafe_allow_html=True)
-    selected_model = st.selectbox("Choose AI Model:", list(AVAILABLE_MODELS.keys()))
-    st.session_state.model_path = AVAILABLE_MODELS[selected_model]
 
-    if st.button("✅ Test Model"):
-        with st.spinner("Checking availability..."):
-            if test_model_availability(st.session_state.model_path):
-                st.success("Model is available!")
-            else:
-                st.error("Model not responding or unavailable.")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    max_length = st.slider("📝 Max Tokens", 50, 500, 200)
-    temperature = st.slider("🔥 Temperature", 0.1, 1.5, 0.7)
-    top_p = st.slider("🎯 Top-p (nucleus sampling)", 0.1, 1.0, 0.9)
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.messages.clear()
 
 # Display previous chat
 for msg in st.session_state.messages:
@@ -175,8 +134,35 @@ if user_input:
     format_message("user", user_input)
 
     with st.spinner("🤖 FarminAi is thinking..."):
-        response = query_model(user_input, st.session_state.model_path, temperature, top_p, max_length)
+        response = query_model(user_input, MODEL_NAME)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     format_message("assistant", response)
     st.rerun()
+
+# --- Mobile Fixes ---
+
+# Add bottom padding on mobile to prevent keyboard overlap
+st.markdown("""
+<style>
+@media (max-width: 768px) {
+    .block-container {
+        padding-bottom: 120px;  /* Extra space for keyboard */
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Scroll chat input into view when focused
+st.markdown("""
+<script>
+const chatInput = window.parent.document.querySelector('input[type="text"]');
+if (chatInput) {
+  chatInput.addEventListener('focus', () => {
+    setTimeout(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    }, 300);
+  });
+}
+</script>
+""", unsafe_allow_html=True)
