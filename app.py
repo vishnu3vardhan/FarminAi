@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import time
 from dotenv import load_dotenv
 
 # Load .env for secret token
@@ -15,23 +16,29 @@ def init_session():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+# Optional: Pre-warm the model to reduce first-response lag
+@st.cache_resource
+def prewarm_model():
+    try:
+        _ = query_model("Hello", MODEL_NAME, retries=1, timeout=20)
+    except Exception:
+        pass
+
 # Page configuration
 st.set_page_config(
     page_title="FarminAi - Farming Assistant",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
 # Custom CSS for styling
 st.markdown("""
 <style>
-/* Base font and background */
 html, body, [class*="css"] {
     font-family: 'Segoe UI', sans-serif;
     background-color: #f5f9f6;
     color: #2e3c3a;
 }
-
-/* Chat bubble container */
 .chat-bubble {
     padding: 1rem;
     border-radius: 1rem;
@@ -39,48 +46,34 @@ html, body, [class*="css"] {
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-
-/* User message styling */
 .user-bubble {
     background: #d1ecf1;
     border-left: 6px solid #17a2b8;
     color: #0c5460;
 }
-
-/* Assistant message styling */
 .assistant-bubble {
     background: #e8f5e9;
     border-left: 6px solid #4caf50;
     color: #2e7d32;
 }
-
-/* On hover, slightly raise bubbles */
 .chat-bubble:hover {
     transform: scale(1.02);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
 }
-
-/* Message header */
 .header {
     font-weight: bold;
     margin-bottom: 0.25rem;
     font-size: 1.1rem;
 }
-
-/* Message body */
 .body-text {
     line-height: 1.65;
     font-size: 1.02rem;
 }
-
-/* Button wrapper (like for new chat) */
 .new-chat-button {
     display: flex;
     justify-content: flex-end;
     margin-bottom: 1rem;
 }
-
-/* Button styling for better visibility */
 button[kind="primary"] {
     background-color: #4caf50;
     color: white;
@@ -89,7 +82,6 @@ button[kind="primary"] {
     padding: 0.5rem 1rem;
     transition: background-color 0.3s ease;
 }
-
 button[kind="primary"]:hover {
     background-color: #388e3c;
 }
@@ -107,8 +99,8 @@ def format_message(role: str, content: str):
     </div>
     """, unsafe_allow_html=True)
 
-# Query Hugging Face model
-def query_model(prompt: str, model: str) -> str:
+# Query Hugging Face model with retry + cleanup
+def query_model(prompt: str, model: str, retries=3, timeout=60) -> str:
     endpoint = f"https://api-inference.huggingface.co/models/{model}"
     headers = {
         "Authorization": f"Bearer {API_TOKEN}",
@@ -135,18 +127,27 @@ def query_model(prompt: str, model: str) -> str:
         }
     }
 
-    try:
-        response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        return result[0].get("generated_text", "Sorry, I couldn't understand your question.").strip()
-    except requests.exceptions.RequestException as e:
-        return f"❌ Network Error: {e}"
-    except Exception as e:
-        return f"❌ Error: {e}"
+    for attempt in range(retries):
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status()
+            result = response.json()
+            raw_output = result[0].get("generated_text", "").strip()
+            cleaned_output = raw_output.split("Farmer:")[0].split("FarminAi:")[0].strip()
+            return cleaned_output if cleaned_output else "Sorry, I couldn't understand your question."
+        except requests.exceptions.Timeout:
+            if attempt < retries - 1:
+                time.sleep(2)
+            else:
+                return "❌ Error: Hugging Face model timed out. Please try again shortly."
+        except requests.exceptions.RequestException as e:
+            return f"❌ Network Error: {e}"
+        except Exception as e:
+            return f"❌ Unexpected Error: {e}"
 
-# Initialize session
+# Initialize session + prewarm
 init_session()
+prewarm_model()
 
 # --- Header ---
 st.title("🌾 FarminAi - Your Smart Farming Assistant")
@@ -181,27 +182,19 @@ if user_input:
 # --- Mobile UI Optimization ---
 st.markdown("""
 <style>
-/* General mobile optimization */
 @media (max-width: 768px) {
-    /* Increase bottom padding for small screens */
     .block-container {
         padding-bottom: 120px !important;
         padding-left: 16px !important;
         padding-right: 16px !important;
     }
-
-    /* Adjust font size for mobile screens */
     .css-18e3th9 {
         font-size: 16px !important;
     }
-    
-    /* Enhance button appearance on mobile */
     button {
         font-size: 16px;
         padding: 10px 20px;
     }
-
-    /* Make text input more user-friendly on mobile */
     input[type="text"] {
         font-size: 18px;
         padding: 12px;
@@ -209,8 +202,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
 }
-
-/* Ensure smooth scrolling effect */
 html {
     scroll-behavior: smooth;
 }
@@ -230,4 +221,3 @@ if (chatInput) {
 }
 </script>
 """, unsafe_allow_html=True)
-
